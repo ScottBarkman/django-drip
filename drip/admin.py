@@ -23,7 +23,7 @@ class DripForm(forms.ModelForm):
 
 
 class DripAdmin(admin.ModelAdmin):
-    list_display = ('name', 'enabled', 'message_class')
+    list_display = ('name', 'enabled', 'message_class', 'base_model')
     inlines = [
         QuerySetRuleInline,
     ]
@@ -74,8 +74,9 @@ class DripAdmin(admin.ModelAdmin):
     def build_extra_context(self, extra_context):
         from drip.utils import get_simple_fields
         extra_context = extra_context or {}
-        User = get_user_model()
-        extra_context['field_data'] = json.dumps(get_simple_fields(User))
+
+        from introductions.models import Introduction
+        extra_context['field_data'] = json.dumps(get_simple_fields(Introduction))
         return extra_context
 
     def add_view(self, request, extra_context=None):

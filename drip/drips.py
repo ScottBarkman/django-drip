@@ -175,8 +175,8 @@ class DripBase(object):
 
         if clauses['exclude']:
             qs = qs.exclude(functools.reduce(operator.or_, clauses['exclude']))
-        qs = qs.filter(*clauses['filter'])
 
+        qs = qs.filter(*clauses['filter'])
         return qs
 
     ##################
@@ -207,12 +207,24 @@ class DripBase(object):
         """
         Do an exclude for all Users who have a SentDrip already.
         """
-        target_user_ids = self.get_queryset().values_list('id', flat=True)
+
+        if self.drip_model.user_field:
+            target_user_ids = self.get_queryset().values_list('%s__id' % self.drip_model.user_field, flat=True)
+        else:
+            target_user_ids = self.get_queryset().values_list('id', flat=True)
+
         exclude_user_ids = SentDrip.objects.filter(date__lt=conditional_now(),
                                                    drip=self.drip_model,
                                                    user__id__in=target_user_ids)\
                                            .values_list('user_id', flat=True)
         self._queryset = self.get_queryset().exclude(id__in=exclude_user_ids)
+
+
+        # convert linked field back to user model
+        if self.drip_model.user_field:
+            self._queryset = get_user_model().objects.filter(id__in=self.get_queryset().values_list(self.drip_model.user_field, flat=True))
+
+
 
     def send(self):
         """
@@ -260,5 +272,10 @@ class DripBase(object):
         Alternatively, you could create Drips on the fly
         using a queryset builder from the admin interface...
         """
-        User = get_user_model()
-        return User.objects
+
+        if self.drip_model.base_model:
+            from django.db.models.loading import get_model
+            model = get_model( *self.drip_model.base_model.split('.',1))
+            return model.objects
+        else:
+            return get_user_model().objects

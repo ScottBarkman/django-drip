@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from django.db.models.loading import get_model
 
 from django.db import models
 from django.core.exceptions import ValidationError
@@ -24,13 +25,16 @@ class Drip(models.Model):
     enabled = models.BooleanField(default=False)
 
     from_email = models.EmailField(null=True, blank=True,
-        help_text='Set a custom from email.')
+                                   help_text='Set a custom from email.')
     from_email_name = models.CharField(max_length=150, null=True, blank=True,
-        help_text="Set a name for a custom from email.")
+                                       help_text="Set a name for a custom from email.")
     subject_template = models.TextField(null=True, blank=True)
     body_html_template = models.TextField(null=True, blank=True,
-        help_text='You will have settings and user in the context.')
+                                          help_text='You will have settings and user in the context.')
     message_class = models.CharField(max_length=120, blank=True, default='default')
+
+    base_model = models.CharField(blank=True, max_length=255, default=get_user_model, help_text='Base model to filter')
+    user_field = models.CharField(blank=True, max_length=255, default="user", help_text='User field on base model to use as user')
 
     @property
     def drip(self):
@@ -49,6 +53,7 @@ class Drip(models.Model):
 
 
 class SentDrip(models.Model):
+
     """
     Keeps a record of all sent drips.
     """
@@ -60,13 +65,12 @@ class SentDrip(models.Model):
     subject = models.TextField()
     body = models.TextField()
     from_email = models.EmailField(
-        null=True, default=None # For south so that it can migrate existing rows.
+        null=True, default=None  # For south so that it can migrate existing rows.
     )
     from_email_name = models.CharField(max_length=150,
-        null=True, default=None # For south so that it can migrate existing rows.
-    )
-
-
+                                       # For south so that it can migrate existing rows.
+                                       null=True, default=None
+                                       )
 
 METHOD_TYPES = (
     ('filter', 'Filter'),
@@ -90,6 +94,7 @@ LOOKUP_TYPES = (
     ('iendswith', 'ends with (case insensitive)'),
 )
 
+
 class QuerySetRule(models.Model):
     date = models.DateTimeField(auto_now_add=True)
     lastchanged = models.DateTimeField(auto_now=True)
@@ -101,13 +106,16 @@ class QuerySetRule(models.Model):
     lookup_type = models.CharField(max_length=12, default='exact', choices=LOOKUP_TYPES)
 
     field_value = models.CharField(max_length=255,
-        help_text=('Can be anything from a number, to a string. Or, do ' +
-                   '`now-7 days` or `today+3 days` for fancy timedelta.'))
+                                   help_text=('Can be anything from a number, to a string. Or, do ' +
+                                              '`now-7 days` or `today+3 days` for fancy timedelta.'))
 
     def clean(self):
-        User = get_user_model()
+        if self.drip.base_model:
+            model = get_model( *self.drip.base_model.split('.',1))
+        else:
+            model = get_user_model()
         try:
-            self.apply(User.objects.all())
+            self.apply(model.objects.all())
         except Exception as e:
             raise ValidationError(
                 '%s raised trying to apply rule: %s' % (type(e).__name__, e))
